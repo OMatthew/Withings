@@ -11,6 +11,14 @@ from google.appengine.api import urlfetch
 import webapp2
 import json
 
+class MainPage(webapp2.RequestHandler):
+    AUTH_URL = 'https://account.withings.com/oauth2_user/authorize2'
+    ACCESS_TOKEN_URL = 'https://account.withings.com/oauth2/token'
+
+    def get(self):
+        self.response.headers['Content-Type'] = 'text/plain'
+        self.response.write('Hello, World!')
+
 class GetDevice(webapp2.RequestHandler):
     """ Demonstrates an HTTP query using urllib2"""
 
@@ -32,7 +40,25 @@ class GetActivity(webapp2.RequestHandler):
                  'enddateymd': '2018-12-28'}
         result = urllib2.urlopen(url+urllib.urlencode(params))
         self.response.write(result.read())
+
+class Authorize(webapp2.RequestHandler):
+    def authorize(self):
+        params = {
+            'response_type': "code",
+            'client_id': "6c13006ccc702eb9942e8ec9f9647b278a2da10876baadda038103464380d0f3",
+            'client_secret': "a4a9c469b6b7d74f9fc142ab98c1a5615b277a91680c7b07e41f984a0da0c73c",
+            'state': "thestate",
+            'scope': "user.info,user.metrics,user.activity",
+            'redirect_uri': "https://app.getpostman.com/oauth2/callback"
+        }
+        url = MainPage.AUTH_URL + urllib.urlencode(params)
+        return url
+    def get(self):
+        self.request.get()
+
 app = webapp2.WSGIApplication([
-    ('/', GetDevice),
+    ('/', MainPage),
+    ('/device', GetDevice)
     ('/activity', GetActivity),
+    ('/authorize', Authorize),
 ], debug=True)
