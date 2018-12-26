@@ -32,13 +32,15 @@ class UrlFetchHandler(webapp2.RequestHandler):
 
     def get(self):
         # [START urlfetch-get]
-        url = 'http://www.google.com/humans.txt'
+        #url = 'http://www.google.com/humans.txt'
         try:
-            result = urlfetch.fetch(url)
-            if result.status_code == 200:
-                self.response.write(result.content)
-            else:
-                self.response.status_code = result.status_code
+            #result = urlfetch.fetch(url)
+            #if result.status_code == 200:
+                #self.response.write(result.content)
+            authentication_code = self.request.get('code', 000000)
+            self.response.write(authentication_code)
+            #else:
+            #    self.response.status_code = result.status_code
         except urlfetch.Error:
             logging.exception('Caught exception fetching url')
         # [END urlfetch-get]
