@@ -9,7 +9,7 @@ import urllib2
 from google.appengine.api import urlfetch
 # [END urlfetch-imports]
 import webapp2
-#import json
+import json
 AUTH_URL = 'https://account.withings.com/oauth2_user/authorize2&'
 ACCESS_TOKEN_URL = 'https://account.withings.com/oauth2/token'
 AUTH_URL_COMPLETE = 'https://account.withings.com/oauth2_user/authorize2?response_type=code&client_id=6c13006ccc702eb9942e8ec9f9647b278a2da10876baadda038103464380d0f3&state=thestate&scope=user.info,user.metrics,user.activity&redirect_uri=http://withingsapp.appspot.com/url_fetch'
@@ -37,8 +37,11 @@ class UrlFetchHandler(webapp2.RequestHandler):
             req = urllib2.Request(ACCESS_TOKEN_URL)
             req.add_data(data)
             access_token_req = urllib2.urlopen(req)
-            access_token = access_token_req.get('access_token', 00000)
+            access_token_read = access_token_req.read()
+            access_token_json = json.loads(access_token_read)
+            access_token = access_token_json["access_token"]
             self.response.write(access_token)
+            #self.response.write(access_token['access_token'])
         except urlfetch.Error:
             logging.exception('Caught exception fetching url')
         # [END urlfetch-get]
