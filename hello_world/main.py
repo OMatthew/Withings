@@ -3,6 +3,11 @@ import urllib
 #import requests
 # [START urllib2-imports]
 import urllib2
+
+import os
+import cloudstorage
+from google.appengine.api import app_identity
+
 # [END urllib2-imports]
 
 # [START urlfetch-imports]
@@ -10,12 +15,11 @@ from google.appengine.api import urlfetch
 # [END urlfetch-imports]
 import webapp2
 import json
-from google.cloud import storage
 
 AUTH_URL = 'https://account.withings.com/oauth2_user/authorize2&'
 ACCESS_TOKEN_URL = 'https://account.withings.com/oauth2/token'
 AUTH_URL_COMPLETE = 'https://account.withings.com/oauth2_user/authorize2?response_type=code&client_id=6c13006ccc702eb9942e8ec9f9647b278a2da10876baadda038103464380d0f3&state=thestate&scope=user.info,user.metrics,user.activity&redirect_uri=http://withingsapp.appspot.com/url_fetch'
-AA="<html><body><h2>The href Attribute</h2><p>HTML links are defined with the a tag. The link address is specified in the href attribute:</p><a href=\"https://account.withings.com/oauth2_user/authorize2?response_type=code&client_id=6c13006ccc702eb9942e8ec9f9647b278a2da10876baadda038103464380d0f3&state=thestate&scope=user.info,user.metrics,user.activity&redirect_uri=http://withingsapp.appspot.com/url_fetch\">This is a link</a></body></html>"
+AA="<html><body><h2>The href AAttribute</h2><p>HTML links are defined with the a tag. The link address is specified in the href attribute:</p><a href=\"https://account.withings.com/oauth2_user/authorize2?response_type=code&client_id=6c13006ccc702eb9942e8ec9f9647b278a2da10876baadda038103464380d0f3&state=thestate&scope=user.info,user.metrics,user.activity&redirect_uri=http://withingsapp.appspot.com/url_fetch\">This is a link</a></body></html>"
 CLIENT_ID = '6c13006ccc702eb9942e8ec9f9647b278a2da10876baadda038103464380d0f3'
 CLIENT_SECRET = 'a4a9c469b6b7d74f9fc142ab98c1a5615b277a91680c7b07e41f984a0da0c73c'
 class MainPage(webapp2.RequestHandler):
