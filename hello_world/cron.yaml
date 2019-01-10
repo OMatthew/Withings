@@ -1,0 +1,13 @@
+cron:
+- description: "access_token"
+  url: /access_token
+  schedule: every 10 mins
+  retry_parameters:
+    min_backoff_seconds: 2.5
+    max_doublings: 5
+- description: "getmeasure"
+  url: /get_measure
+  schedule: every 2 mins
+  retry_parameters:
+    min_backoff_seconds: 2.5
+    max_doublings: 5

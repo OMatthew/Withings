@@ -151,11 +151,19 @@ class GetMeasure (webapp2.RequestHandler):
             cloudstorage_file.close()
         url = GET_MEASURE+'&access_token='
         url = url+access_token
-        self.response.write('accesstoken:')
-        self.response.write(len(access_token))
+        #self.response.write('accesstoken:')
+        #self.response.write(len(access_token))
         measure_req = urllib2.urlopen(url)
         measure_read = measure_req.read()
-        self.response.write(measure_read)
+        #self.response.write(measure_read)
+        filename = '/withingsapp.appspot.com/getdevice'
+        write_retry_params = cloudstorage.RetryParams(backoff_factor=1.1)
+        with cloudstorage.open(
+                filename, 'w', content_type='text/plain', options={
+                    'x-goog-meta-foo': 'foo', 'x-goog-meta-bar': 'bar'},
+                retry_params=write_retry_params) as cloudstorage_file:
+            cloudstorage_file.write(measure_read)
+            cloudstorage_file.close()
 
 
 
