@@ -1,20 +1,23 @@
 import logging
 import urllib
-#import requests
-# [START urllib2-imports]
 import urllib2
-
 import os
+import time
 import cloudstorage
 from google.appengine.api import app_identity #for default bucket name
 
-# [END urllib2-imports]
 
 # [START urlfetch-imports]
 from google.appengine.api import urlfetch
 # [END urlfetch-imports]
 import webapp2
+import jinja2
 import json
+
+JINJA_ENVIRONMENT = jinja2.Environment(
+    loader=jinja2.FileSystemLoader(os.path.dirname(__file__)),
+    extensions=['jinja2.ext.autoescape'],
+    autoescape=True)
 
 AUTH_URL = 'https://account.withings.com/oauth2_user/authorize2&'
 ACCESS_TOKEN_URL = 'https://account.withings.com/oauth2/token'
@@ -22,11 +25,16 @@ AUTH_URL_COMPLETE = 'https://account.withings.com/oauth2_user/authorize2?respons
 AA="<html><body><h2>The href AAttribute</h2><p>HTML links are defined with the a tag. The link address is specified in the href attribute:</p><a href=\"https://account.withings.com/oauth2_user/authorize2?response_type=code&client_id=6c13006ccc702eb9942e8ec9f9647b278a2da10876baadda038103464380d0f3&state=thestate&scope=user.info,user.metrics,user.activity&redirect_uri=http://withingsapp.appspot.com/url_fetch\">This is a link</a></body></html>"
 CLIENT_ID = '6c13006ccc702eb9942e8ec9f9647b278a2da10876baadda038103464380d0f3'
 CLIENT_SECRET = 'a4a9c469b6b7d74f9fc142ab98c1a5615b277a91680c7b07e41f984a0da0c73c'
-GET_MEASURE = 'https://wbsapi.withings.net/measure?action=getmeas'
+GET_MEASURE = 'https://wbsapi.withings.net/measure?'
+GET_MEASURE_V2 = 'https://wbsapi.withings.net/v2/measure?'
 class MainPage(webapp2.RequestHandler):
 
     def get(self):
-        self.response.write(AA)
+        template_values = {
+            'url': AUTH_URL_COMPLETE
+        }
+        template = JINJA_ENVIRONMENT.get_template('index.html')
+        self.response.write(template.render(template_values))
 
 class UrlFetchHandler(webapp2.RequestHandler):
     """ Demonstrates an HTTP query using urlfetch"""
@@ -99,22 +107,10 @@ class UrlFetchHandler(webapp2.RequestHandler):
 class RefreshAccessToken(webapp2.RequestHandler):
     def get(self):
         filename = '/withingsapp.appspot.com/tempp'
-        refresh_token = '8f4741e62fb701c2f2ea86d46f51d932d3b2e336'
-        #access_token = '0ab'
         with cloudstorage.open(filename) as cloudstorage_file:
             refresh_token = cloudstorage_file.readline()
             access_token = cloudstorage_file.readline()
             cloudstorage_file.close()
-        # self.response.write (len(refresh_token))
-        # self.response.write (len('031bf5c958d641ff146c57b1ec9306c5aa5998e2'))
-        # if '031bf5c958d641ff146c57b1ec9306c5aa5998e2' in refresh_token[:-1]:
-        #     self.response.write('ttrue\n')
-        # else:
-        #     self.response.write (refresh_token)
-        # if refresh_token[:-1] in '031bf5c958d641ff146c57b1ec9306c5aa5998e2':
-        #     self.response.write('truee\n')
-        #self.response.write('refresh\n')
-        # self.response.write(refresh_token)
         data_value = {'grant_type': 'refresh_token',
                     'client_id': CLIENT_ID,
                     'client_secret': CLIENT_SECRET,
@@ -128,10 +124,6 @@ class RefreshAccessToken(webapp2.RequestHandler):
         access_token_json = json.loads(access_token_read)
         access_token = access_token_json["access_token"]
         refresh_token = access_token_json["refresh_token"]
-        # self.response.write ('\n\n\naccesstoken##\n')
-        # self.response.write (access_token)
-        # self.response.write('\n\n\nrefreshtoken##\n')
-        # self.response.write (refresh_token)
 
         write_retry_params = cloudstorage.RetryParams(backoff_factor=1.1)
         with cloudstorage.open(
@@ -142,6 +134,7 @@ class RefreshAccessToken(webapp2.RequestHandler):
             cloudstorage_file.write('\n')
             cloudstorage_file.write(access_token.encode('utf-8'))
             cloudstorage_file.close()
+
 class GetMeasure (webapp2.RequestHandler):
     def get(self):
         filename = '/withingsapp.appspot.com/tempp'
@@ -149,7 +142,7 @@ class GetMeasure (webapp2.RequestHandler):
             refresh_token = cloudstorage_file.readline()
             access_token = cloudstorage_file.readline()
             cloudstorage_file.close()
-        url = GET_MEASURE+'&access_token='
+        url = GET_MEASURE+'action=getmeas&access_token='
         url = url+access_token
         #self.response.write('accesstoken:')
         #self.response.write(len(access_token))
@@ -165,14 +158,38 @@ class GetMeasure (webapp2.RequestHandler):
             cloudstorage_file.write(measure_read)
             cloudstorage_file.close()
 
+class GetActivity (webapp2.RequestHandler):
+    def get (self):
+        filename = '/withingsapp.appspot.com/tempp'
+        endtime = int (time.time())
+        starttime = endtime - 86400
+        with cloudstorage.open(filename) as cloudstorage_file:
+            refresh_token = cloudstorage_file.readline()
+            access_token = cloudstorage_file.readline()
+            cloudstorage_file.close()
+        url = GET_MEASURE_V2+'action=getintradayactivity&access_token='
+        url = url+access_token
+        url = url+'&startdate='+str(starttime)+'&enddate='+str(endtime)
+        activity_req = urllib2.urlopen(url)
+        actvity_read = activity_req.read()
+        filename = '/withingsapp.appspot.com/getactivity'
+        write_retry_params = cloudstorage.RetryParams(backoff_factor=1.1)
+        with cloudstorage.open(
+                filename, 'w', content_type='text/plain', options={
+                    'x-goog-meta-foo': 'foo', 'x-goog-meta-bar': 'bar'},
+                retry_params=write_retry_params) as cloudstorage_file:
+            cloudstorage_file.write(actvity_read)
+            cloudstorage_file.close()
+
+
 
 
 
 app = webapp2.WSGIApplication([
     ('/', MainPage),
     ('/url_fetch', UrlFetchHandler),
-    # ('/device', GetDevice)
-    # ('/activity', GetActivity),
+    # ('/device', GetDevice),
     ('/access_token', RefreshAccessToken),
     ('/get_measure', GetMeasure),
+    ('/getintradayactivity', GetActivity),
 ], debug=True)
