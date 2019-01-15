@@ -153,9 +153,14 @@ class UrlFetchHandler(webapp2.RequestHandler):
 
         except urlfetch.Error:
             logging.exception('Caught exception fetching url')
-        # [END urlfetch-get]
+
+
         bucket = '/' + bucket_name
-        filename = bucket + '/tempp'
+
+        index_file = cloudstorage.open(bucket+'/current_index')
+        index = index_file.readline()
+
+        filename = bucket + '/Tokens/' + index
         self.create_file(filename, refresh_token.encode('utf-8'), access_token.encode('utf-8'))
 
 
@@ -183,34 +188,55 @@ class UrlFetchHandler(webapp2.RequestHandler):
 
 class RefreshAccessToken(webapp2.RequestHandler):
     def get(self):
-        filename = '/withingsapp.appspot.com/tempp'
-        with cloudstorage.open(filename) as cloudstorage_file:
-            refresh_token = cloudstorage_file.readline()
-            access_token = cloudstorage_file.readline()
-            cloudstorage_file.close()
-        data_value = {'grant_type': 'refresh_token',
-                    'client_id': CLIENT_ID,
-                    'client_secret': CLIENT_SECRET,
-                    'refresh_token': refresh_token[:-1]}
-        data = urllib.urlencode(data_value)
-        self.response.write (data)
-        req = urllib2.Request(ACCESS_TOKEN_URL)
-        req.add_data(data)
-        access_token_req = urllib2.urlopen(req)
-        access_token_read = access_token_req.read()
-        access_token_json = json.loads(access_token_read)
-        access_token = access_token_json["access_token"]
-        refresh_token = access_token_json["refresh_token"]
+        bucket_name = os.environ.get(
+            'BUCKET_NAME', app_identity.get_default_gcs_bucket_name())
+        bucket = '/' + bucket_name
+        index_file = cloudstorage.open(bucket + '/current_index')
+        index = int(index_file.readline())
 
-        write_retry_params = cloudstorage.RetryParams(backoff_factor=1.1)
-        with cloudstorage.open(
-                filename, 'w', content_type='text/plain', options={
-                    'x-goog-meta-foo': 'foo', 'x-goog-meta-bar': 'bar'},
-                retry_params=write_retry_params) as cloudstorage_file:
-            cloudstorage_file.write(refresh_token.encode('utf-8'))
-            cloudstorage_file.write('\n')
-            cloudstorage_file.write(access_token.encode('utf-8'))
-            cloudstorage_file.close()
+        for x in range (0, index+1):
+            filename = '/withingsapp.appspot.com/Tokens/' + str(x)
+            if (self.FileExists('/withingsapp.appspot.com/Tokens/', str(x))):
+                with cloudstorage.open(filename) as cloudstorage_file:
+                    refresh_token = cloudstorage_file.readline()
+                    access_token = cloudstorage_file.readline()
+                    cloudstorage_file.close()
+                data_value = {'grant_type': 'refresh_token',
+                             'client_id': CLIENT_ID,
+                            'client_secret': CLIENT_SECRET,
+                            'refresh_token': refresh_token[:-1]}
+                data = urllib.urlencode(data_value)
+                self.response.write (data)
+                req = urllib2.Request(ACCESS_TOKEN_URL)
+                req.add_data(data)
+                access_token_req = urllib2.urlopen(req)
+                access_token_read = access_token_req.read()
+                access_token_json = json.loads(access_token_read)
+                access_token = access_token_json["access_token"]
+                refresh_token = access_token_json["refresh_token"]
+
+                write_retry_params = cloudstorage.RetryParams(backoff_factor=1.1)
+                with cloudstorage.open(
+                        filename, 'w', content_type='text/plain', options={
+                            'x-goog-meta-foo': 'foo', 'x-goog-meta-bar': 'bar'},
+                        retry_params=write_retry_params) as cloudstorage_file:
+                    cloudstorage_file.write(refresh_token.encode('utf-8'))
+                    cloudstorage_file.write('\n')
+                    cloudstorage_file.write(access_token.encode('utf-8'))
+                    cloudstorage_file.close()
+
+    def FileExists(self, bucketname, filename):
+        stats = cloudstorage.listbucket(bucketname)
+        exist = False
+        for stat in stats:
+            #self.response.write('\nstat\n\n')
+            #self.response.write(stat)
+            if stat.filename in bucketname+'/'+filename:
+                if bucketname+'/'+filename in stat.filename:
+                    exist = True
+                    #self.response.write('\nexisting file:\n')
+                    #self.response.write(stat)
+        return (exist)
 
 class GetMeasure (webapp2.RequestHandler):
     def get(self):
