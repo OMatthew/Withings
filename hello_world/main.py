@@ -27,14 +27,91 @@ CLIENT_ID = '6c13006ccc702eb9942e8ec9f9647b278a2da10876baadda038103464380d0f3'
 CLIENT_SECRET = 'a4a9c469b6b7d74f9fc142ab98c1a5615b277a91680c7b07e41f984a0da0c73c'
 GET_MEASURE = 'https://wbsapi.withings.net/measure?'
 GET_MEASURE_V2 = 'https://wbsapi.withings.net/v2/measure?'
-class MainPage(webapp2.RequestHandler):
 
+
+class MainPage(webapp2.RequestHandler):
     def get(self):
+        template_values = {
+            'user_name': 'the_user'
+        }
+        template = JINJA_ENVIRONMENT.get_template('index0.html')
+        self.response.write(template.render(template_values))
+
+class GetAuthentication(webapp2.RequestHandler):
+    def get(self):
+        user_name = self.request.get('user_name', 'xxx')
+        bucket_name = os.environ.get(
+            'BUCKET_NAME', app_identity.get_default_gcs_bucket_name())
+        bucket = '/' + bucket_name
+        tempfilename = bucket+'/tempusername'
+        write_retry_params = cloudstorage.RetryParams(backoff_factor=1.1)
+        gcs_file_write=cloudstorage.open(
+            tempfilename, 'w', content_type='text/plain', options={
+                'x-goog-meta-foo': 'foo', 'x-goog-meta-bar': 'bar'},
+            retry_params=write_retry_params
+        )
+        index = 0
+        if (self.FileExists('/withingsapp.appspot.com', 'username')):
+            # copy out the info in /username, and print the info into another file
+            filename = bucket+'/username'
+            with cloudstorage.open(filename) as gcs_file_read:
+                contents = gcs_file_read.read()
+                gcs_file_write.write(contents)
+                gcs_file_read.close()
+            #get current index, and give ++index to this current user
+            with cloudstorage.open(bucket+'/current_index') as index_file:
+                index = int(index_file.readline()) + 1
+                #save user name in /tempusername
+                gcs_file_write.write('\n')
+                gcs_file_write.write(user_name.encode('utf-8'))
+                gcs_file_write.write('\n')
+                gcs_file_write.write(str(index))
+                gcs_file_write.close()
+                index_file.close()
+
+            try:
+                cloudstorage.copy2(tempfilename, bucket + '/username')
+            except cloudstorage.NotFoundError:
+                self.response.write('NotFoundError')
+
+        else:#this is the first user
+            with cloudstorage.open(
+                    (bucket + '/username'), 'w', content_type='text/plain', options={
+                        'x-goog-meta-foo': 'foo', 'x-goog-meta-bar': 'bar'},
+                    retry_params=write_retry_params) as user_name_file:
+                user_name_file.write(user_name.encode('utf-8'))
+                user_name_file.write('\n')
+                user_name_file.write(str(index))
+                user_name_file.close()
+
+        #write current index into /current_index
+        with cloudstorage.open(
+                (bucket+'/current_index'), 'w', content_type='text/plain', options={
+                    'x-goog-meta-foo': 'foo', 'x-goog-meta-bar': 'bar'},
+                retry_params=write_retry_params) as index_file:
+            index_file.write(str(index))
+            index_file.close()
+
+
         template_values = {
             'url': AUTH_URL_COMPLETE
         }
         template = JINJA_ENVIRONMENT.get_template('index.html')
         self.response.write(template.render(template_values))
+
+
+    def FileExists(self, bucketname, filename):
+        stats = cloudstorage.listbucket(bucketname)
+        exist = False
+        for stat in stats:
+            #self.response.write('\nstat\n\n')
+            #self.response.write(stat)
+            if stat.filename in bucketname+'/'+filename:
+                if bucketname+'/'+filename in stat.filename:
+                    exist = True
+                    #self.response.write('\nexisting file:\n')
+                    #self.response.write(stat)
+        return (exist)
 
 class UrlFetchHandler(webapp2.RequestHandler):
     """ Demonstrates an HTTP query using urlfetch"""
@@ -188,6 +265,7 @@ class GetActivity (webapp2.RequestHandler):
 app = webapp2.WSGIApplication([
     ('/', MainPage),
     ('/url_fetch', UrlFetchHandler),
+    ('/get_auth', GetAuthentication),
     # ('/device', GetDevice),
     ('/access_token', RefreshAccessToken),
     ('/get_measure', GetMeasure),
