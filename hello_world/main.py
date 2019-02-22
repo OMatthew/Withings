@@ -6,6 +6,9 @@ import time
 import cloudstorage
 from google.appengine.api import app_identity #for default bucket name
 
+import datetime
+from datetime import datetime
+from datetime import time as dtime
 
 # [START urlfetch-imports]
 from google.appengine.api import urlfetch
@@ -42,7 +45,7 @@ class GetAuthentication(webapp2.RequestHandler):
         user_name = self.request.get('user_name', 'xxx')
         bucket_name = os.environ.get(
             'BUCKET_NAME', app_identity.get_default_gcs_bucket_name())
-        bucket = '/' + bucket_name
+        bucket = '/' + bucket_name + '/Users'
         tempfilename = bucket+'/tempusername'
         write_retry_params = cloudstorage.RetryParams(backoff_factor=1.1)
         gcs_file_write=cloudstorage.open(
@@ -51,7 +54,7 @@ class GetAuthentication(webapp2.RequestHandler):
             retry_params=write_retry_params
         )
         index = 0
-        if (self.FileExists('/withingsapp.appspot.com', 'username')):
+        if (self.FileExists('/withingsapp.appspot.com/Users', 'username')):
             # copy out the info in /username, and print the info into another file
             filename = bucket+'/username'
             with cloudstorage.open(filename) as gcs_file_read:
@@ -91,6 +94,22 @@ class GetAuthentication(webapp2.RequestHandler):
                 retry_params=write_retry_params) as index_file:
             index_file.write(str(index))
             index_file.close()
+
+        #create the participantID/ folder
+        with cloudstorage.open(
+                (bucket+'/'+str(index)+'/'), 'w', options={
+                    'x-goog-meta-foo': 'foo', 'x-goog-meta-bar': 'bar'},
+                retry_params=write_retry_params) as participantID:
+            participantID.close()
+            self.response.write ("participantID")
+
+        #create the dailyrecords/ folder in the new participantID/ folder
+        with cloudstorage.open(
+                (bucket+'/'+str(index)+'/'+'Dailyrecords/'), 'w', options={
+                    'x-goog-meta-foo': 'foo', 'x-goog-meta-bar': 'bar'},
+                retry_params=write_retry_params) as dailyrecords:
+            dailyrecords.close()
+            self.response.write ("dailyrecords")
 
 
         template_values = {
@@ -153,12 +172,13 @@ class UrlFetchHandler(webapp2.RequestHandler):
             logging.exception('Caught exception fetching url')
 
 
-        bucket = '/' + bucket_name
+        bucket = '/' + bucket_name + '/Users'
 
         index_file = cloudstorage.open(bucket+'/current_index')
         index = index_file.readline()
 
-        filename = bucket + '/Tokens/' + index
+        #filename = bucket + '/Tokens/' + index
+        filename = bucket + '/' + index + '/' + 'token'
         self.create_file(filename, refresh_token.encode('utf-8'), access_token.encode('utf-8'))
 
 
@@ -188,12 +208,13 @@ class RefreshAccessToken(webapp2.RequestHandler):
     def get(self):
         bucket_name = os.environ.get(
             'BUCKET_NAME', app_identity.get_default_gcs_bucket_name())
-        bucket = '/' + bucket_name
+        bucket = '/' + bucket_name + '/Users'
         index_file = cloudstorage.open(bucket + '/current_index')
         index = int(index_file.readline())
 
         for x in range (0, index+1):
-            filename = '/withingsapp.appspot.com/Tokens/' + str(x)
+            #filename = '/withingsapp.appspot.com/Tokens/' + str(x)
+            filename = bucket + '/' + str(x) + '/' + 'token'
             if (True): #(self.FileExists('/withingsapp.appspot.com/Tokens/', str(x))):
                 self.response.write(str(x)+'\n')
                 with cloudstorage.open(filename) as cloudstorage_file:
@@ -239,27 +260,33 @@ class RefreshAccessToken(webapp2.RequestHandler):
 
 class GetMeasure (webapp2.RequestHandler):
     def get(self):
+        mymidnight = datetime.combine(datetime.today(), dtime(6, 0, 0, 0))
+        mymidnight_timestamp = (mymidnight - datetime(1970, 1, 1)).total_seconds()
         bucket_name = os.environ.get(
             'BUCKET_NAME', app_identity.get_default_gcs_bucket_name())
-        bucket = '/' + bucket_name
+        bucket = '/' + bucket_name + '/Users'
         index_file = cloudstorage.open(bucket + '/current_index')
         index = int(index_file.readline())
         for x in range(0, index + 1):
             self.response.write ('in for loop')
-            filename = '/withingsapp.appspot.com/Tokens/' + str(x)
+            #filename = '/withingsapp.appspot.com/Tokens/' + str(x)
+            filename = bucket + '/' + str(x) + '/' + 'token'
             if (True):#(self.FileExists('/withingsapp.appspot.com/Tokens/', str(x))):
                 with cloudstorage.open(filename) as cloudstorage_file:
                     refresh_token = cloudstorage_file.readline()
                     access_token = cloudstorage_file.readline()
                     cloudstorage_file.close()
-                url = GET_MEASURE+'action=getmeas&access_token='
+                startdate=mymidnight_timestamp
+                enddate=int (time.time())
+                url = GET_MEASURE+'action=getmeas&startdate='+str(startdate)+'&enddate='+str(enddate)+'&meastype=1'+'&access_token='
                 url = url+access_token
                 self.response.write('accesstoken:')
                 self.response.write(len(access_token))
                 measure_req = urllib2.urlopen(url)
                 measure_read = measure_req.read()
                 #self.response.write(measure_read)
-                filename = '/withingsapp.appspot.com/Weight/Raw/' + str(x)
+                #filename = '/withingsapp.appspot.com/Weight/Raw/' + str(x)
+                filename = bucket + '/' + str(x) + '/Dailyrecords/' + str(datetime.today().strftime('%Y%m%d')) + '/weight.json'
                 write_retry_params = cloudstorage.RetryParams(backoff_factor=1.1)
                 with cloudstorage.open(
                         filename, 'w', content_type='text/plain', options={
@@ -285,16 +312,19 @@ class GetMeasure (webapp2.RequestHandler):
 
 class GetActivity (webapp2.RequestHandler):
     def get (self):
+        mymidnight = datetime.combine(datetime.today(), dtime(6, 0, 0, 0))
+        mymidnight_timestamp = (mymidnight - datetime(1970, 1, 1)).total_seconds()
         bucket_name = os.environ.get(
             'BUCKET_NAME', app_identity.get_default_gcs_bucket_name())
-        bucket = '/' + bucket_name
+        bucket = '/' + bucket_name + '/Users'
         index_file = cloudstorage.open(bucket + '/current_index')
         index = int(index_file.readline())
         for x in range(0, index + 1):
-            filename = '/withingsapp.appspot.com/Tokens/' + str(x)
+            #filename = '/withingsapp.appspot.com/Tokens/' + str(x)
+            filename = bucket + '/' + str(x) + '/' + 'token'
             if (True):  # (self.FileExists('/withingsapp.appspot.com/Tokens/', str(x))):
                 endtime = int (time.time())
-                starttime = endtime - 86400
+                starttime = mymidnight_timestamp#endtime - 86400
                 with cloudstorage.open(filename) as cloudstorage_file:
                     refresh_token = cloudstorage_file.readline()
                     access_token = cloudstorage_file.readline()
@@ -304,7 +334,8 @@ class GetActivity (webapp2.RequestHandler):
                 url = url+'&startdate='+str(starttime)+'&enddate='+str(endtime)
                 activity_req = urllib2.urlopen(url)
                 actvity_read = activity_req.read()
-                filename = '/withingsapp.appspot.com/Activity/Raw/' + str(x)
+                #filename = '/withingsapp.appspot.com/Activity/Raw/' + str(x)
+                filename = bucket + '/' + str(x) + '/Dailyrecords/' + str(datetime.today().strftime('%Y%m%d')) + '/activity.json'
                 write_retry_params = cloudstorage.RetryParams(backoff_factor=1.1)
                 with cloudstorage.open(
                         filename, 'w', content_type='text/plain', options={

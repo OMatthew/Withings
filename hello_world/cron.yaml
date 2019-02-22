@@ -7,15 +7,13 @@ cron:
       max_doublings: 5
   - description: "getmeasure"
     url: /get_measure
-    schedule: every day 22:20
-    timezone: Asia/Taipei
+    schedule: every 5 mins
     retry_parameters:
       min_backoff_seconds: 2.5
       max_doublings: 5
   - description: "getactivity"
     url: /getintradayactivity
-    schedule: every day 22:22
-    timezone: Asia/Taipei
+    schedule: every 5 mins
     retry_parameters:
       min_backoff_seconds: 2.5
       max_doublings: 5
