@@ -1,0 +1,23 @@
+API calls for Matt:
+- game play duration call [called when app is backgrounded] (timestamp open, timestamp close, son of interaction data) 
+- save game state [called when app is backgrounded] (whatever son data Matt wants)
+- retrieve game state (sent Matt back his JSON)
+- send step goal
+
+- total step count for previous k days
+url: withingsapp.appspot.com/total_step_count
+path parameters: 
+	participantID
+	days
+return type: int
+example: http://withingsapp.appspot.com/total_step_count?participantID=123456&days=2 returns the total number of steps today and yesterday for participant with ID 123456
+
+- all weight events for previous k days
+
+- today’s intraday data
+url: withingsapp.appspot.com/intraday_data
+path parameters:
+	participantID
+return type: json
+example: https://withingsapp.appspot.com/intraday_data?participantID=123456 returns something similar to the contents of this file: https://github.com/graceleee/Withings/blob/master/example_intradayactivity
+
