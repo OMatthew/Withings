@@ -9,6 +9,7 @@ from google.appengine.api import app_identity #for default bucket name
 import datetime
 from datetime import datetime
 from datetime import time as dtime
+from datetime import timedelta
 
 # [START urlfetch-imports]
 from google.appengine.api import urlfetch
@@ -16,6 +17,8 @@ from google.appengine.api import urlfetch
 import webapp2
 import jinja2
 import json
+
+timezone=6
 
 JINJA_ENVIRONMENT = jinja2.Environment(
     loader=jinja2.FileSystemLoader(os.path.dirname(__file__)),
@@ -215,7 +218,7 @@ class RefreshAccessToken(webapp2.RequestHandler):
         for x in range (0, index+1):
             #filename = '/withingsapp.appspot.com/Tokens/' + str(x)
             filename = bucket + '/' + str(x) + '/' + 'token'
-            if (True): #(self.FileExists('/withingsapp.appspot.com/Tokens/', str(x))):
+            if self.FileExists(bucket+ '/' + str(x), 'token'): #(True): #(self.FileExists('/withingsapp.appspot.com/Tokens/', str(x))):
                 self.response.write(str(x)+'\n')
                 with cloudstorage.open(filename) as cloudstorage_file:
                     refresh_token = cloudstorage_file.readline()
@@ -260,7 +263,7 @@ class RefreshAccessToken(webapp2.RequestHandler):
 
 class GetMeasure (webapp2.RequestHandler):
     def get(self):
-        mymidnight = datetime.combine(datetime.today(), dtime(6, 0, 0, 0))
+        mymidnight = datetime.combine(datetime.today()-timedelta(hours=timezone), dtime(6, 0, 0, 0))
         mymidnight_timestamp = (mymidnight - datetime(1970, 1, 1)).total_seconds()
         bucket_name = os.environ.get(
             'BUCKET_NAME', app_identity.get_default_gcs_bucket_name())
@@ -271,13 +274,13 @@ class GetMeasure (webapp2.RequestHandler):
             self.response.write ('in for loop')
             #filename = '/withingsapp.appspot.com/Tokens/' + str(x)
             filename = bucket + '/' + str(x) + '/' + 'token'
-            if (True):#(self.FileExists('/withingsapp.appspot.com/Tokens/', str(x))):
+            if self.FileExists(bucket+ '/' + str(x), 'token'): #(True):#(self.FileExists('/withingsapp.appspot.com/Tokens/', str(x))):
                 with cloudstorage.open(filename) as cloudstorage_file:
                     refresh_token = cloudstorage_file.readline()
                     access_token = cloudstorage_file.readline()
                     cloudstorage_file.close()
                 startdate=mymidnight_timestamp
-                enddate=int (time.time())
+                enddate=int (time.time()) #timestamp
                 url = GET_MEASURE+'action=getmeas&startdate='+str(startdate)+'&enddate='+str(enddate)+'&meastype=1'+'&access_token='
                 url = url+access_token
                 self.response.write('accesstoken:')
@@ -286,7 +289,7 @@ class GetMeasure (webapp2.RequestHandler):
                 measure_read = measure_req.read()
                 #self.response.write(measure_read)
                 #filename = '/withingsapp.appspot.com/Weight/Raw/' + str(x)
-                filename = bucket + '/' + str(x) + '/Dailyrecords/' + str(datetime.today().strftime('%Y%m%d')) + '/weight.json'
+                filename = bucket + '/' + str(x) + '/Dailyrecords/' + str((datetime.today()-timedelta(hours=timezone)).strftime('%Y%m%d')) + '/weight.json'
                 write_retry_params = cloudstorage.RetryParams(backoff_factor=1.1)
                 with cloudstorage.open(
                         filename, 'w', content_type='text/plain', options={
@@ -312,7 +315,7 @@ class GetMeasure (webapp2.RequestHandler):
 
 class GetActivity (webapp2.RequestHandler):
     def get (self):
-        mymidnight = datetime.combine(datetime.today(), dtime(6, 0, 0, 0))
+        mymidnight = datetime.combine(datetime.today()-timedelta(hours=timezone), dtime(6, 0, 0, 0))
         mymidnight_timestamp = (mymidnight - datetime(1970, 1, 1)).total_seconds()
         bucket_name = os.environ.get(
             'BUCKET_NAME', app_identity.get_default_gcs_bucket_name())
@@ -322,7 +325,7 @@ class GetActivity (webapp2.RequestHandler):
         for x in range(0, index + 1):
             #filename = '/withingsapp.appspot.com/Tokens/' + str(x)
             filename = bucket + '/' + str(x) + '/' + 'token'
-            if (True):  # (self.FileExists('/withingsapp.appspot.com/Tokens/', str(x))):
+            if self.FileExists(bucket+ '/' + str(x), 'token'): #(True):  # (self.FileExists('/withingsapp.appspot.com/Tokens/', str(x))):
                 endtime = int (time.time())
                 starttime = mymidnight_timestamp#endtime - 86400
                 with cloudstorage.open(filename) as cloudstorage_file:
@@ -335,7 +338,7 @@ class GetActivity (webapp2.RequestHandler):
                 activity_req = urllib2.urlopen(url)
                 actvity_read = activity_req.read()
                 #filename = '/withingsapp.appspot.com/Activity/Raw/' + str(x)
-                filename = bucket + '/' + str(x) + '/Dailyrecords/' + str(datetime.today().strftime('%Y%m%d')) + '/activity.json'
+                filename = bucket + '/' + str(x) + '/Dailyrecords/' + str((datetime.today()-timedelta(hours=timezone)).strftime('%Y%m%d')) + '/activity.json'
                 write_retry_params = cloudstorage.RetryParams(backoff_factor=1.1)
                 with cloudstorage.open(
                         filename, 'w', content_type='text/plain', options={
@@ -357,6 +360,342 @@ class GetActivity (webapp2.RequestHandler):
                     #self.response.write(stat)
         return (exist)
 
+class IntradayData (webapp2.RequestHandler):
+    def get(self):
+        participantID = self.request.get('participantID','000')
+        #self.response.write(participantID)
+        userIndex = getUserID(participantID.encode('utf-8'))
+        if (userIndex=='error'):
+            self.response.set_status(404)
+            self.response.out.write('wrong participantID')
+            return
+        else:
+            bucket_name = os.environ.get(
+                'BUCKET_NAME', app_identity.get_default_gcs_bucket_name())
+            bucket = '/' + bucket_name + '/Users'
+            userIndex = '/' + userIndex
+            #self.response.write(userIndex)
+            filename = bucket+userIndex+'/Dailyrecords/'+str(datetime.today().strftime('%Y%m%d')) + '/activity.json'
+            with cloudstorage.open(filename) as gcs_file_read:
+                contents = gcs_file_read.read()
+                self.response.out.write(contents)
+                gcs_file_read.close()
+            #self.response.write(userIndex)
+
+class TotalStepCount (webapp2.RequestHandler):
+    def get(self):
+        days = self.request.get('days', '1')
+        participantID = self.request.get('participantID', '000')
+        today = datetime.today()
+        userIndex = getUserID(participantID.encode('utf-8'))
+        totalstepcount=0
+        #self.response.out.write('totalstepcount\n')
+        if (userIndex == 'error'):
+            self.response.set_status(404)
+            self.response.out.write('wrong participantID')
+            return
+        else:
+            #self.response.write(userIndex)
+            bucket_name = os.environ.get(
+                'BUCKET_NAME', app_identity.get_default_gcs_bucket_name())
+            bucket = '/' + bucket_name + '/Users' + '/' + userIndex + '/Dailyrecords'
+            for x in range (int(days)):
+                tempday = str((today-timedelta(x)).strftime('%Y%m%d'))+'/'
+                #self.response.out.write(tempday)
+                if self.FileExists(bucket,tempday):
+                    filename = bucket + '/' + tempday + 'activity.json'
+                    with cloudstorage.open(filename) as gcs_file_read:
+                        contents = gcs_file_read.read()
+                        contents_json = json.loads(contents)
+
+                        #self.response.out.write ('type:' + str(type(contents_json["body"]["series"]).__name__))
+                        if len(contents_json["body"]["series"])!= 0:
+                            #self.response.write(len(contents_json["body"]["series"]))
+                            for key, value in contents_json["body"]["series"].iteritems():
+                                try:
+                                    totalstepcount+=int(value["steps"])
+                                except KeyError:
+                                    self.response.out.write('')
+                        gcs_file_read.close()
+
+                # else:  #this is when "days" is larger than the actual number of days in the database
+                #     self.response.out.write('')
+            self.response.out.write(totalstepcount)
+
+    def FileExists(self, bucketname, filename):
+        stats = cloudstorage.listbucket(bucketname)
+        exist = False
+        for stat in stats:
+            if bucketname+'/'+filename in stat.filename:
+                exist = True
+        return (exist)
+
+class WeightEvents(webapp2.RequestHandler): #all weight events for previous k days
+    def get(self):
+        days = self.request.get('days', '1')
+        participantID = self.request.get('participantID', '000')
+        today = datetime.today()
+        userIndex = getUserID(participantID.encode('utf-8'))
+        #self.response.write('userIndex: ' + str(userIndex))
+        data = {}
+        if (userIndex == 'error'):
+            self.response.set_status(404)
+            self.response.out.write('wrong participantID')
+            return
+        else:
+            bucket_name = os.environ.get(
+                'BUCKET_NAME', app_identity.get_default_gcs_bucket_name())
+            bucket = '/' + bucket_name + '/Users' + '/' + userIndex + '/Dailyrecords'
+            for x in range(int(days)):
+                tempday = str((today - timedelta(x)).strftime('%Y%m%d'))
+                tempdayfile = tempday + '/'
+                # self.response.out.write(tempday)
+                if self.FileExists(bucket, tempdayfile):
+                    filename = bucket + '/' + tempdayfile + 'weight.json'
+                    with cloudstorage.open(filename) as gcs_file_read:
+                        contents = gcs_file_read.read()
+                        contents_json = json.loads(contents)
+                        # self.response.write(type(contents_json["body"]["measuregrps"]).__name__)
+                        # self.response.write('\n\n##\n\n')
+                        # self.response.write(contents_json["body"]["measuregrps"])
+                        for value in contents_json["body"]["measuregrps"]:
+                            #self.response.write(type(value).__name__) #dict
+                            #self.response.write(type(value["measures"]).__name__) #list
+                            #self.response.write(len(value["measures"]))#1
+                            try:
+                                data[str(value["grpid"])]=value["measures"][0]["value"]
+                            except KeyError:
+                                self.response.write('error')
+                            #data[value["grpid"]] = value["measures"]["value"]
+                            # for key, value in contents_json["body"]["measuregrps"].iteritems():
+                            #     data[value["grpid"]]=value["measures"]["value"]
+            self.response.out.write(data)
+
+    def FileExists(self, bucketname, filename):
+        stats = cloudstorage.listbucket(bucketname)
+        exist = False
+        for stat in stats:
+            if bucketname+'/'+filename in stat.filename:
+                exist = True
+                return(exist)
+            # else:
+            #     self.response.write(stat.filename)
+            #     self.response.write('#')
+        return (stats)
+
+class StepGoal(webapp2.RequestHandler):
+    def get(self):
+        participantID = self.request.get('participantID', '000')
+        stepGoal = self.request.get('stepGoal', '000')
+        today = datetime.today()
+        userIndex = getUserID(participantID.encode('utf-8'))
+        if (userIndex == 'error'):
+            self.response.set_status(404)
+            self.response.out.write('wrong participantID')
+            return
+        else:
+            bucket_name = os.environ.get(
+                'BUCKET_NAME', app_identity.get_default_gcs_bucket_name())
+            bucket = '/' + bucket_name + '/Users' + '/' + userIndex + '/Dailyrecords'
+            filename = bucket + '/' + today.strftime('%Y%m%d') + '/' + 'stepgoal.txt'
+            write_retry_params = cloudstorage.RetryParams(backoff_factor=1.1)
+            with cloudstorage.open(
+                    filename, 'w', content_type='text/plain', options={
+                        'x-goog-meta-foo': 'foo', 'x-goog-meta-bar': 'bar'},
+                    retry_params=write_retry_params) as cloudstorage_file:
+                cloudstorage_file.write(stepGoal.encode('utf-8'))
+                cloudstorage_file.close()
+
+#testtesttesttesttesttest
+class testIntradayData (webapp2.RequestHandler):
+    def get(self):
+        participantID = self.request.get('participantID','000')
+        #self.response.write(participantID)
+        userIndex = getUserID(participantID.encode('utf-8'))
+        if (userIndex=='error'):
+            self.response.set_status(404)
+            self.response.out.write('wrong participantID')
+            return
+        else:
+            bucket_name = os.environ.get(
+                'BUCKET_NAME', app_identity.get_default_gcs_bucket_name())
+            bucket = '/' + bucket_name + '/Users'
+            userIndex = '/' + userIndex
+            #self.response.write(userIndex)
+            filename = bucket+userIndex+'/Dailyrecords/'+str((datetime.today()-timedelta(hours=timezone)).strftime('%Y%m%d')) + '/activity.json'
+            with cloudstorage.open(filename) as gcs_file_read:
+                contents = gcs_file_read.read()
+                self.response.out.write(contents)
+                gcs_file_read.close()
+            #self.response.write(userIndex)
+
+class testTotalStepCount (webapp2.RequestHandler):
+    def get(self):
+        days = self.request.get('days', '1')
+        participantID = self.request.get('participantID', '000')
+        today = datetime.today()-timedelta(hours=timezone)
+        userIndex = getUserID(participantID.encode('utf-8'))
+        totalstepcount=0
+        #self.response.out.write('totalstepcount\n')
+        if (userIndex == 'error'):
+            self.response.set_status(404)
+            self.response.out.write('wrong participantID')
+            return
+        else:
+            #self.response.write(userIndex)
+            bucket_name = os.environ.get(
+                'BUCKET_NAME', app_identity.get_default_gcs_bucket_name())
+            bucket = '/' + bucket_name + '/Users' + '/' + userIndex + '/Dailyrecords'
+            for x in range (int(days)):
+                tempday = str((today-timedelta(x)).strftime('%Y%m%d'))+'/'
+                #self.response.out.write(tempday)
+                if self.FileExists(bucket,tempday):
+                    filename = bucket + '/' + tempday + 'activity.json'
+                    with cloudstorage.open(filename) as gcs_file_read:
+                        contents = gcs_file_read.read()
+                        contents_json = json.loads(contents)
+
+                        #self.response.out.write ('type:' + str(type(contents_json["body"]["series"]).__name__))
+                        if len(contents_json["body"]["series"])!= 0:
+                            #self.response.write(len(contents_json["body"]["series"]))
+                            for key, value in contents_json["body"]["series"].iteritems():
+                                try:
+                                    totalstepcount+=int(value["steps"])
+                                except KeyError:
+                                    self.response.out.write('')
+                        gcs_file_read.close()
+
+                # else:  #this is when "days" is larger than the actual number of days in the database
+                #     self.response.out.write('')
+            self.response.out.write(totalstepcount)
+
+    def FileExists(self, bucketname, filename):
+        stats = cloudstorage.listbucket(bucketname)
+        exist = False
+        for stat in stats:
+            if bucketname+'/'+filename in stat.filename:
+                exist = True
+        return (exist)
+
+class testWeightEvents(webapp2.RequestHandler): #all weight events for previous k days
+    def get(self):
+        days = self.request.get('days', '1')
+        participantID = self.request.get('participantID', '000')
+        today = datetime.today()-timedelta(hours=timezone)
+        userIndex = getUserID(participantID.encode('utf-8'))
+        #self.response.write('userIndex: ' + str(userIndex))
+        data = {}
+        if (userIndex == 'error'):
+            self.response.set_status(404)
+            self.response.out.write('wrong participantID')
+            return
+        else:
+            bucket_name = os.environ.get(
+                'BUCKET_NAME', app_identity.get_default_gcs_bucket_name())
+            bucket = '/' + bucket_name + '/Users' + '/' + userIndex + '/Dailyrecords'
+            for x in range(int(days)):
+                tempday = str((today - timedelta(x)).strftime('%Y%m%d'))
+                tempdayfile = tempday + '/'
+                # self.response.out.write(tempday)
+                if self.FileExists(bucket, tempdayfile):
+                    filename = bucket + '/' + tempdayfile + 'weight.json'
+                    with cloudstorage.open(filename) as gcs_file_read:
+                        contents = gcs_file_read.read()
+                        contents_json = json.loads(contents)
+                        # self.response.write(type(contents_json["body"]["measuregrps"]).__name__)
+                        # self.response.write('\n\n##\n\n')
+                        # self.response.write(contents_json["body"]["measuregrps"])
+                        for value in contents_json["body"]["measuregrps"]:
+                            #self.response.write(type(value).__name__) #dict
+                            #self.response.write(type(value["measures"]).__name__) #list
+                            #self.response.write(len(value["measures"]))#1
+                            try:
+                                data[str(value["grpid"])]=value["measures"][0]["value"]
+                            except KeyError:
+                                self.response.write('error')
+                            #data[value["grpid"]] = value["measures"]["value"]
+                            # for key, value in contents_json["body"]["measuregrps"].iteritems():
+                            #     data[value["grpid"]]=value["measures"]["value"]
+            self.response.out.write(data)
+
+    def FileExists(self, bucketname, filename):
+        stats = cloudstorage.listbucket(bucketname)
+        exist = False
+        for stat in stats:
+            if bucketname+'/'+filename in stat.filename:
+                exist = True
+                return(exist)
+            # else:
+            #     self.response.write(stat.filename)
+            #     self.response.write('#')
+        return (stats)
+
+class testStepGoal(webapp2.RequestHandler):
+    def get(self):
+        participantID = self.request.get('participantID', '000')
+        stepGoal = self.request.get('stepGoal', '000')
+        today = datetime.today()-timedelta(hours=timezone)
+        userIndex = getUserID(participantID.encode('utf-8'))
+        if (userIndex == 'error'):
+            self.response.set_status(404)
+            self.response.out.write('wrong participantID')
+            return
+        else:
+            bucket_name = os.environ.get(
+                'BUCKET_NAME', app_identity.get_default_gcs_bucket_name())
+            bucket = '/' + bucket_name + '/Users' + '/' + userIndex + '/Dailyrecords'
+            filename = bucket + '/' + today.strftime('%Y%m%d') + '/' + 'stepgoal.txt'
+            write_retry_params = cloudstorage.RetryParams(backoff_factor=1.1)
+            with cloudstorage.open(
+                    filename, 'w', content_type='text/plain', options={
+                        'x-goog-meta-foo': 'foo', 'x-goog-meta-bar': 'bar'},
+                    retry_params=write_retry_params) as cloudstorage_file:
+                cloudstorage_file.write(stepGoal.encode('utf-8'))
+                cloudstorage_file.close()
+#testtesttesttesttesttest
+
+
+def FileExists(bucketname, filename):
+    stats = cloudstorage.listbucket(bucketname)
+    exist = False
+    for stat in stats:
+        if stat.filename in bucketname + '/' + filename:
+            if bucketname + '/' + filename in stat.filename:
+                exist = True
+                # self.response.write('\nexisting file:\n')
+                # self.response.write(stat)
+    return (exist)
+
+def getUserID(participantID):
+    #self.response.write('participantID: '+participantID+'#length: '+str(len(participantID)))
+    bucket_name = os.environ.get(
+        'BUCKET_NAME', app_identity.get_default_gcs_bucket_name())
+    bucket = '/' + bucket_name + '/Users'
+    userfilename = bucket+'/username'
+    indexfilename = bucket+'/current_index'
+
+    with cloudstorage.open(indexfilename) as index_file:
+        index = int(index_file.readline()) + 1
+        index_file.close()
+
+    with cloudstorage.open(userfilename) as user_file:
+        found = False
+        for x in range (index): #the index here is the number of current users, not the number in the index_file #for (x=0; x<index; x++)
+            temp = user_file.readline()
+            #self.response.write('temp: '+temp+' length: '+str(len(temp.encode('utf-8'))))
+            if (temp[:-1]==str(participantID)):
+                userIndex = int(user_file.readline())
+                found = True
+                #user_file.close()
+                #return (userIndex[:-1])
+            else:
+                user_file.readline()
+        if found:
+            user_file.close()
+            return(str(userIndex)) #returns the index found in the last occurrence of the participantID
+        user_file.close()
+        return ('error')
+
 
 
 
@@ -369,6 +708,14 @@ app = webapp2.WSGIApplication([
     ('/access_token', RefreshAccessToken),
     ('/get_measure', GetMeasure),
     ('/getintradayactivity', GetActivity),
+    ('/intraday_data', IntradayData),
+    ('/total_step_count', TotalStepCount),
+    ('/weight_events', WeightEvents),
+    ('/step_goal', StepGoal),
+    ('/test_intraday_data', testIntradayData),
+    ('/test_total_step_count', testTotalStepCount),
+    ('/test_weight_events', testWeightEvents),
+    ('/test_step_goal', testStepGoal),
 ], debug=True)
 
 #finished with raw. need to get clean done. FileExists wouldn't return "True"
